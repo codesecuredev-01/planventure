@@ -1,0 +1,71 @@
+name: CodeSecure Security Scan (Private)
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - name: Install CodeSecure
+        run: |
+          if ! command -v codesecure &> /dev/null; then
+            pip install codesecure-core codesecure-mcp codesecure-cli
+          fi
+
+      - name: Run Security Scan
+        id: scanner
+        continue-on-error: true
+        run: |
+          printf "y\nn\n" | codesecure scan . --fail-on critical,high --format sarif --output results.sarif
+
+      - name: Process and Patch SARIF
+        if: always()
+        run: |
+          REPORT_PATH=$(find . -name "*.sarif" -type f | head -n 1)
+          if [ -n "$REPORT_PATH" ]; then
+            cp "$REPORT_PATH" fixed_results.sarif
+            echo "Successfully found and patched $REPORT_PATH"
+          else
+            echo "No SARIF report found!"
+            exit 1
+          fi
+          # Fix timestamps and null GUIDs for GitHub compatibility
+          sed -i 's/+00:00Z/Z/g' fixed_results.sarif
+          sed -i 's/"guid": null/"guid": "cea0f146-248d-44a8-a320-94943960e6e2"/g' fixed_results.sarif
+
+      # This step will likely still fail with a 404 on a Free Private repo, 
+      # but we keep it here for future-proofing.
+      - name: Upload Results to GitHub Security Tab
+        if: always() 
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: fixed_results.sarif
+          token: ${{ secrets.SCAN_TOKEN }}
+
+      # THIS IS THE WORKAROUND: Save the file for local viewing in VS Code
+      - name: Save Scan Results for Local Viewing
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codesecure-report
+          path: fixed_results.sarif
+          retention-days: 14
+
+      - name: Check Quality Gate
+        if: always() && steps.scanner.outcome == 'failure'
+        run: |
+          echo "Security scan failed quality gate (Critical/High issues found)."
+          exit 1
