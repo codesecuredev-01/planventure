@@ -1,5 +1,5 @@
 # github public repo
-name: CodeSecure Security Scan (Private)
+name: CodeSecure Security Scan (Public)
 on: [push, pull_request]
 
 permissions:
@@ -14,20 +14,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Google Auth
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Setup GCR
-        run: gcloud auth configure-docker gcr.io --quiet
+      # NO GOOGLE AUTH REQUIRED IF IMAGE IS PUBLIC
+      # NO SETUP GCR REQUIRED IF IMAGE IS PUBLIC
 
       - name: Run Security Scan
         id: scanner
         continue-on-error: true
-        # We use -u root to ensure permissions on the mounted workspace.
-        # We set CODESECURE_TOKEN="" as it is optional during the Beta period.
         run: |
+          # The image will be pulled automatically without auth if it's public
           docker run --rm \
             -u root \
             -v ${{ github.workspace }}:/workspace \
@@ -43,7 +37,6 @@ jobs:
         if: always() 
         uses: github/codeql-action/upload-sarif@v3
         with:
-          # Automatically detects and uploads the .sarif file created in the folder
           sarif_file: codesecure_scan_reports
           token: ${{ secrets.GITHUB_TOKEN }}
 
