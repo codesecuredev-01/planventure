@@ -27,7 +27,7 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
             -e CODESECURE_TOKEN="" \
-            gcr.io/codesecure-479807/codesecure:1.0.21 \
+            gcr.io/codesecure-479807/codesecure:1.0.27 \
             scan /workspace \
             --format sarif \
             --output /workspace/codesecure_scan_reports \
